@@ -1,3 +1,9 @@
+[![make.fun bounty](https://make.fun/badge/news-image-20261123.svg)](https://make.fun/bounty/news-image-20261123)
+![rank](https://make.fun/badge/news-image-20261123/FayBZ77/news-image-20261123/rank.svg)
+![reward](https://make.fun/badge/news-image-20261123/FayBZ77/news-image-20261123/reward.svg)
+
+My entry to the [news-image-20261123 bounty on make.fun](https://make.fun/bounty/news-image-20261123).
+
 # The world on Monday 23 November 2026, in one image
 
 `entry.png` (1024x1024) is a newspaper front page summing up the world's news of
