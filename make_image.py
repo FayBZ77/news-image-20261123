@@ -65,9 +65,10 @@ def break_lines(draw, fnt, text, width):
 
 def flow(draw, x, y, fnt, text, width, leading, fill):
     """Draw wrapped text downward from (x, y); return the y below it."""
-    for line in break_lines(draw, fnt, text, width):
-        draw.text((x, y), line, font=fnt, fill=fill)
-    return y + leading * len(break_lines(draw, fnt, text, width))
+    lines = break_lines(draw, fnt, text, width)
+    for j, line in enumerate(lines):
+        draw.text((x, y + j * leading), line, font=fnt, fill=fill)
+    return y + leading * len(lines)
 
 
 def section_tag(draw, x, y, label, color):
