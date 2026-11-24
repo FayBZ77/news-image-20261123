@@ -1,166 +1,191 @@
 #!/usr/bin/env python3
-"""Front-page summary of the world news of Monday 23 November 2026, drawn with PIL.
+"""Draw the front page of Monday 23 November 2026 as a single PNG.
 
-Stories (all reported on 23 Nov 2026, cross-checked across Reuters, AP-style wires and
-day-roundups): Nvidia reinstates Jensen Huang and the market rips; Ukraine sinks a Russian
-corvette in a Libyan port; Iran vows to defy the US blockade at Hormuz; COP31 ends with no
-deal; a Russian strike flattens a Dymer apartment block; a Banten candy-factory fire kills 24.
+The page is a broadsheet: a dated masthead, one dominant lead story with its own
+chart panel, two war stories side by side, three shorter briefs, and a ticker of
+the day's remaining headlines. Every story was reported on 23 November 2026 and
+cross-checked across the day's wires and roundups before a word was drawn.
 """
 from PIL import Image, ImageDraw, ImageFont
 
-W, H = 1024, 1024
-PAPER = (246, 241, 230)
-INK = (18, 20, 24)
-GRAY = (80, 84, 88)
-RULE = (30, 30, 34)
-LIGHT = (198, 190, 170)
-RED = (172, 38, 44)
-NAVY = (22, 52, 92)
-GREEN = (16, 122, 62)
-GREEN_LT = (64, 199, 120)
-TEAL = (13, 106, 100)
-BROWN = (146, 84, 24)
-PANEL = (16, 26, 22)
+PAGE_W = 1024
+PAGE_H = 1024
+MARGIN = 44
 
-SERIF_BLACK = "/usr/share/fonts/truetype/noto/NotoSerif-Black.ttf"
-SANS_BLACK = "/usr/share/fonts/truetype/noto/NotoSans-Black.ttf"
-SANS_XB = "/usr/share/fonts/truetype/noto/NotoSans-ExtraBold.ttf"
-SANS_B = "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"
-SANS = "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"
-SANS_COND_B = "/usr/share/fonts/truetype/noto/NotoSans-CondensedBold.ttf"
+PALETTE = {
+    "paper": (246, 241, 230),
+    "ink": (18, 20, 24),
+    "muted": (80, 84, 88),
+    "rule": (30, 30, 34),
+    "hairline": (198, 190, 170),
+    "red": (172, 38, 44),
+    "navy": (22, 52, 92),
+    "teal": (13, 106, 100),
+    "brown": (146, 84, 24),
+    "panel": (16, 26, 22),
+    "panel_grid": (44, 58, 50),
+    "panel_text": (168, 178, 170),
+    "chart": (64, 199, 120),
+}
 
-img = Image.new("RGB", (W, H), PAPER)
-d = ImageDraw.Draw(img)
+FONT_FILES = {
+    "serif": "/usr/share/fonts/truetype/noto/NotoSerif-Black.ttf",
+    "black": "/usr/share/fonts/truetype/noto/NotoSans-Black.ttf",
+    "xbold": "/usr/share/fonts/truetype/noto/NotoSans-ExtraBold.ttf",
+    "bold": "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+    "text": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+    "cond": "/usr/share/fonts/truetype/noto/NotoSans-CondensedBold.ttf",
+}
+
+_font_cache = {}
 
 
-def F(path, size):
-    return ImageFont.truetype(path, size)
+def font(kind, size):
+    key = (kind, size)
+    if key not in _font_cache:
+        _font_cache[key] = ImageFont.truetype(FONT_FILES[kind], size)
+    return _font_cache[key]
 
 
-def tw(f, s):
-    return d.textlength(s, font=f)
-
-
-def wrap(f, s, max_w):
-    words, lines, cur = s.split(), [], ""
-    for w_ in words:
-        t = (cur + " " + w_).strip()
-        if tw(f, t) <= max_w or not cur:
-            cur = t
+def break_lines(draw, fnt, text, width):
+    """Greedy word wrap measured with the font's own advance widths."""
+    lines = []
+    current = ""
+    for word in text.split(" "):
+        trial = word if not current else current + " " + word
+        if draw.textlength(trial, font=fnt) <= width or not current:
+            current = trial
         else:
-            lines.append(cur)
-            cur = w_
-    if cur:
-        lines.append(cur)
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
     return lines
 
 
-def para(x, y, f, s, max_w, leading, color=INK):
-    for line in wrap(f, s, max_w):
-        d.text((x, y), line, font=f, fill=color)
-        y += leading
-    return y
+def flow(draw, x, y, fnt, text, width, leading, fill):
+    """Draw wrapped text downward from (x, y); return the y below it."""
+    for line in break_lines(draw, fnt, text, width):
+        draw.text((x, y), line, font=fnt, fill=fill)
+    return y + leading * len(break_lines(draw, fnt, text, width))
 
 
-def kicker(x, y, s, color):
-    f = F(SANS_XB, 19)
-    d.text((x, y), s, font=f, fill=color)
-    return tw(f, s)
+def section_tag(draw, x, y, label, color):
+    draw.text((x, y), label, font=font("xbold", 19), fill=color)
 
 
-def headline(x, y, s, size, max_w, color=INK):
-    f = F(SERIF_BLACK, size)
-    return para(x, y, f, s, max_w, int(size * 1.04), color)
+def big_headline(draw, x, y, text, size, width):
+    return flow(draw, x, y, font("serif", size), text, width, round(size * 1.04), PALETTE["ink"])
 
 
-M = 44  # page margin
+def masthead(draw):
+    draw.text((MARGIN, 26), "THE WORLD IN ONE PICTURE", font=font("xbold", 21), fill=PALETTE["muted"])
+    date_text = "MONDAY  •  23 NOVEMBER 2026"
+    date_font = font("black", 25)
+    draw.text((PAGE_W - MARGIN - draw.textlength(date_text, font=date_font), 22),
+              date_text, font=date_font, fill=PALETTE["red"])
+    draw.line([(MARGIN, 62), (PAGE_W - MARGIN, 62)], fill=PALETTE["rule"], width=5)
+    draw.line([(MARGIN, 71), (PAGE_W - MARGIN, 71)], fill=PALETTE["rule"], width=2)
 
-# ---------------------------------------------------------------- masthead
-d.text((M, 26), "THE WORLD IN ONE PICTURE", font=F(SANS_XB, 21), fill=GRAY)
-dateline = "MONDAY  •  23 NOVEMBER 2026"
-f_date = F(SANS_BLACK, 25)
-d.text((W - M - tw(f_date, dateline), 22), dateline, font=f_date, fill=RED)
-d.line([(M, 62), (W - M, 62)], fill=RULE, width=5)
-d.line([(M, 71), (W - M, 71)], fill=RULE, width=2)
 
-# ---------------------------------------------------------------- lead story
-y = 88
-kicker(M, y, "THE DAY'S BIG STORY  —  MARKETS", RED)
-y += 32
-y = headline(M, y, "HUANG IS BACK AT NVIDIA", 64, 620)
-y += 6
-y = para(M, y, F(SANS, 23),
+def chart_panel(draw):
+    x0, y0, x1, y1 = 668, 88, PAGE_W - MARGIN, 348
+    draw.rectangle([x0, y0, x1, y1], fill=PALETTE["panel"])
+    draw.text((x0 + 16, y0 + 10), "NVIDIA — MONDAY", font=font("bold", 17), fill=PALETTE["panel_text"])
+    for step in range(4):
+        gy = y1 - 40 - step * 52
+        draw.line([(x0 + 12, gy), (x1 - 12, gy)], fill=PALETTE["panel_grid"], width=1)
+    climb = [(x0 + 14, y1 - 66), (x0 + 60, y1 - 60), (x0 + 104, y1 - 84), (x0 + 146, y1 - 74),
+             (x0 + 188, y1 - 110), (x0 + 228, y1 - 128), (x0 + 262, y1 - 176), (x0 + 298, y1 - 208)]
+    draw.line(climb, fill=PALETTE["chart"], width=5, joint="curve")
+    tip_x, tip_y = x0 + 298, y1 - 208
+    draw.polygon([(tip_x - 9, tip_y - 12), (tip_x + 12, tip_y + 3), (tip_x - 12, tip_y + 8)], fill=PALETTE["chart"])
+    draw.text((x0 + 16, y1 - 40), "after the board rehires", font=font("text", 15), fill=PALETTE["panel_text"])
+    draw.text((x0 + 16, y1 - 22), "its founder as CEO", font=font("text", 15), fill=PALETTE["panel_text"])
+
+
+def lead_story(draw):
+    y = 88
+    section_tag(draw, MARGIN, y, "THE DAY'S BIG STORY  —  MARKETS", PALETTE["red"])
+    y = big_headline(draw, MARGIN, y + 32, "HUANG IS BACK AT NVIDIA", 64, 620)
+    flow(draw, MARGIN, y + 6, font("text", 23),
          "Eleven days after resigning in scandal, Jensen Huang returns as CEO of the "
-         "chipmaker he founded — and Nvidia leaps 31% in a historic rally.", 600, 30)
+         "chipmaker he founded — and Nvidia leaps 31% in a historic rally.",
+         600, 30, PALETTE["ink"])
+    chart_panel(draw)
+    draw.line([(MARGIN, 366), (PAGE_W - MARGIN, 366)], fill=PALETTE["rule"], width=2)
 
-# chart panel (right of the lead)
-cx0, cy0, cx1, cy1 = 668, 88, W - M, 348
-d.rectangle([cx0, cy0, cx1, cy1], fill=PANEL)
-d.text((cx0 + 16, cy0 + 10), "NVIDIA — MONDAY", font=F(SANS_B, 17), fill=(168, 178, 170))
-pts = [(cx0 + 14, cy1 - 66), (cx0 + 60, cy1 - 60), (cx0 + 104, cy1 - 84), (cx0 + 146, cy1 - 74),
-       (cx0 + 188, cy1 - 110), (cx0 + 228, cy1 - 128), (cx0 + 262, cy1 - 176), (cx0 + 298, cy1 - 208)]
-d.line(pts, fill=GREEN_LT, width=5, joint="curve")
-for gx in range(4):
-    gy = cy1 - 40 - gx * 52
-    d.line([(cx0 + 12, gy), (cx1 - 12, gy)], fill=(44, 58, 50), width=1)
-d.polygon([(298 + cx0 - 9, cy1 - 208 - 12), (298 + cx0 + 12, cy1 - 208 + 3), (298 + cx0 - 12, cy1 - 208 + 8)], fill=GREEN_LT)
-d.text((cx0 + 16, cy1 - 40), "after the board rehires", font=F(SANS, 15), fill=(168, 178, 170))
-d.text((cx0 + 16, cy1 - 22), "its founder as CEO", font=F(SANS, 15), fill=(168, 178, 170))
 
-d.line([(M, 366), (W - M, 366)], fill=RULE, width=2)
+def war_stories(draw):
+    top = 384
+    col_w = (PAGE_W - 2 * MARGIN - 28) // 2
+    right_x = MARGIN + col_w + 28
+    section_tag(draw, MARGIN, top, "WAR AT SEA", PALETTE["navy"])
+    big_headline(draw, MARGIN, top + 28, "UKRAINE SINKS RUSSIAN CORVETTE IN LIBYA", 30, col_w)
+    flow(draw, MARGIN, top + 122, font("text", 20),
+         "Seven naval drones sink the Merkury in a Libyan port, Zelenskyy announces — "
+         "Kyiv's war leaps a thousand miles beyond Europe's shores.", col_w, 25, PALETTE["ink"])
+    section_tag(draw, right_x, top, "STRAIT OF HORMUZ", PALETTE["teal"])
+    big_headline(draw, right_x, top + 28, "IRAN VOWS TO BREAK THE US BLOCKADE", 30, col_w)
+    flow(draw, right_x, top + 122, font("text", 20),
+         "Tehran says it will use all its tools against the naval blockade. Trump, "
+         "unmoved, hints at strikes after New Year if no deal is reached.", col_w, 25, PALETTE["ink"])
+    draw.line([(MARGIN + col_w + 14, top), (MARGIN + col_w + 14, top + 196)], fill=PALETTE["hairline"], width=2)
+    draw.line([(MARGIN, top + 208), (PAGE_W - MARGIN, top + 208)], fill=PALETTE["rule"], width=2)
 
-# ---------------------------------------------------------------- middle row: two war stories
-y = 384
-col_w = (W - 2 * M - 28) // 2
-x2 = M + col_w + 28
-kicker(M, y, "WAR AT SEA", NAVY)
-headline(M, y + 28, "UKRAINE SINKS RUSSIAN CORVETTE IN LIBYA", 30, col_w)
-para(M, y + 122, F(SANS, 20),
-     "Seven naval drones sink the Merkury in a Libyan port, Zelenskyy announces — "
-     "Kyiv's war leaps a thousand miles beyond Europe's shores.", col_w, 25)
-kicker(x2, y, "STRAIT OF HORMUZ", TEAL)
-headline(x2, y + 28, "IRAN VOWS TO BREAK THE US BLOCKADE", 30, col_w)
-para(x2, y + 122, F(SANS, 20),
-     "Tehran says it will use all its tools against the naval blockade. Trump, "
-     "unmoved, hints at strikes after New Year if no deal is reached.", col_w, 25)
-d.line([(M + col_w + 14, y), (M + col_w + 14, y + 196)], fill=LIGHT, width=2)
-d.line([(M, y + 208), (W - M, y + 208)], fill=RULE, width=2)
 
-# ---------------------------------------------------------------- bottom row: three stories
-y = 616
-c3 = (W - 2 * M - 2 * 24) // 3
-cols = [
-    ("CLIMATE", BROWN, "COP31 ENDS WITHOUT A DEAL",
+BRIEFS = [
+    ("CLIMATE", "brown", "COP31 ENDS WITHOUT A DEAL",
      "The UN climate summit in Turkey collapses over fossil fuels and money — "
      "what one delegate calls diplomacy's darkest moment."),
-    ("UKRAINE", NAVY, "DYMER STRIKE KILLS AT LEAST 11",
+    ("UKRAINE", "navy", "DYMER STRIKE KILLS AT LEAST 11",
      "A Russian strike flattens an apartment block in Dymer, near Kyiv. In Kryvyi "
      "Rih, a child and a young woman are also killed."),
-    ("DISASTER", RED, "FACTORY FIRE KILLS 24 IN INDONESIA",
+    ("DISASTER", "red", "FACTORY FIRE KILLS 24 IN INDONESIA",
      "A blaze sweeps a candy factory in Banten. Rescuers search the ruins for "
      "dozens still missing as families wait outside."),
 ]
-for i, (kick, color, head, body) in enumerate(cols):
-    x = M + i * (c3 + 24)
-    kicker(x, y, kick, color)
-    headline(x, y + 27, head, 24, c3)
-    para(x, y + 27 + (52 if len(head) < 24 else 78), F(SANS, 18), body, c3, 23)
-    if i:
-        d.line([(x - 12, y), (x - 12, y + 218)], fill=LIGHT, width=2)
-d.line([(M, y + 232), (W - M, y + 232)], fill=RULE, width=2)
 
-# ---------------------------------------------------------------- ticker
-y = y + 248
-d.text((M, y), "ALSO TODAY", font=F(SANS_XB, 19), fill=RED)
-ticker = ("CrowdStrike buys Zscaler in a $44bn cyber deal  •  Bitcoin back above $61,000 after a "
-          "two-year low  •  BepiColombo slips into orbit around Mercury  •  Kilauea's lava fountain "
-          "lights up Hawaii  •  Belgium strike grounds flights  •  FBI fugitive 'El Chapo Isidro' "
-          "captured in Sinaloa  •  Kenya and DR Congo restore ties")
-para(M, y + 28, F(SANS_COND_B, 21), ticker, W - 2 * M, 26, GRAY)
 
-# footer line
-d.line([(M, H - 40), (W - M, H - 40)], fill=RULE, width=2)
-d.text((M, H - 32), "The day's world news, summed up in one image — Monday 23 November 2026.", font=F(SANS, 16), fill=GRAY)
+def brief_stories(draw):
+    top = 616
+    col_w = (PAGE_W - 2 * MARGIN - 2 * 24) // 3
+    for idx, (tag, color_key, head, body) in enumerate(BRIEFS):
+        x = MARGIN + idx * (col_w + 24)
+        section_tag(draw, x, top, tag, PALETTE[color_key])
+        big_headline(draw, x, top + 27, head, 24, col_w)
+        body_y = top + 27 + (52 if len(head) < 24 else 78)
+        flow(draw, x, body_y, font("text", 18), body, col_w, 23, PALETTE["ink"])
+        if idx:
+            draw.line([(x - 12, top), (x - 12, top + 218)], fill=PALETTE["hairline"], width=2)
+    draw.line([(MARGIN, top + 232), (PAGE_W - MARGIN, top + 232)], fill=PALETTE["rule"], width=2)
 
-img.save("/home/hatch/workspace/makefun/news23/entry.png")
-print("saved")
+
+def ticker_and_footer(draw):
+    top = 616 + 248
+    draw.text((MARGIN, top), "ALSO TODAY", font=font("xbold", 19), fill=PALETTE["red"])
+    items = ("CrowdStrike buys Zscaler in a $44bn cyber deal  •  Bitcoin back above $61,000 after a "
+             "two-year low  •  BepiColombo slips into orbit around Mercury  •  Kilauea's lava fountain "
+             "lights up Hawaii  •  Belgium strike grounds flights  •  FBI fugitive 'El Chapo Isidro' "
+             "captured in Sinaloa  •  Kenya and DR Congo restore ties")
+    flow(draw, MARGIN, top + 28, font("cond", 21), items, PAGE_W - 2 * MARGIN, 26, PALETTE["muted"])
+    draw.line([(MARGIN, PAGE_H - 40), (PAGE_W - MARGIN, PAGE_H - 40)], fill=PALETTE["rule"], width=2)
+    draw.text((MARGIN, PAGE_H - 32),
+              "The day's world news, summed up in one image — Monday 23 November 2026.",
+              font=font("text", 16), fill=PALETTE["muted"])
+
+
+def main():
+    canvas = Image.new("RGB", (PAGE_W, PAGE_H), PALETTE["paper"])
+    draw = ImageDraw.Draw(canvas)
+    masthead(draw)
+    lead_story(draw)
+    war_stories(draw)
+    brief_stories(draw)
+    ticker_and_footer(draw)
+    canvas.save("/home/hatch/workspace/makefun/news23/entry.png")
+    print("saved entry.png")
+
+
+if __name__ == "__main__":
+    main()
